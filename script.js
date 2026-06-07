@@ -4403,7 +4403,7 @@ function defaultSettings() {
     restrictTeacherAnalytics: false, restrictTeacherFees: false, restrictTeacherList: false, restrictTeacherSettings: false,
     overallGradingMode: 'auto',
     overallGradeThresholds: null,
-    atApiKey: '', atUsername: '', atSenderId: ''
+    atApiKey: '998877', atUsername: 'botiso', atSenderId: ''
   };
 }
 
@@ -11770,8 +11770,8 @@ async function testAtSMS() {
 async function atSendSMS(recipients, message) {
   // recipients: array of { phone, name }
   // Returns { sent: n, failed: n, errors: [] }
-  const apiKey    = settings.atApiKey   || '';
-  const username  = settings.atUsername || '';
+  const apiKey    = settings.atApiKey   || '998877';
+  const username  = settings.atUsername || 'botiso';
   const senderId  = settings.atSenderId || '';
   if (!apiKey || !username) {
     return { sent: 0, failed: recipients.length, errors: ['SMS gateway not configured. Go to Settings → SMS Gateway.'] };
