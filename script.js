@@ -4404,11 +4404,15 @@ function defaultSettings() {
 
 // ═══════════════ SEED DATA ═══════════════
 function seedData() {
-  if (!classes.length) {
+  // Always enforce exactly Grade 9 as the only class, Stream S as the only stream.
+  // This removes any stale defaults (Grade 8, E/W, North, etc.) left in localStorage.
+  const hasGrade9Only = classes.length === 1 && classes[0].id === 'cls1' && classes[0].name === 'Grade 9';
+  if (!hasGrade9Only) {
     classes = [{ id:'cls1', name:'Grade 9', level:'9' }];
     save(K.classes, classes);
   }
-  if (!streams.length) {
+  const hasStreamSOnly = streams.length === 1 && streams[0].id === 'str1' && streams[0].name === 'S' && streams[0].classId === 'cls1';
+  if (!hasStreamSOnly) {
     streams = [{ id:'str1', name:'S', classId:'cls1' }];
     save(K.streams, streams);
   }
