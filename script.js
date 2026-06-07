@@ -4137,7 +4137,7 @@ function finishLogin(school) {
   try { hookReportFeeAutoFill(); } catch(e) { console.warn('hookReportFeeAutoFill', e); }
   try { renderExamSubjectCheckboxes([]); } catch(e) { console.warn('renderExamSubjectCheckboxes', e); }
   try { renderArchivedStudents(); } catch(e) { console.warn('renderArchivedStudents', e); }
-  const smsCEl = document.getElementById('smsCredits'); if (smsCEl) smsCEl.textContent = smsCredits;
+  try { updateAtStatus(); } catch(e) {}
   document.getElementById('loginScreen').style.display = 'none';
   saveSession();
   launchApp();
@@ -4388,7 +4388,7 @@ async function initApp() {
         setExamCategory('regular'); hookReportFeeAutoFill();
         renderExamSubjectCheckboxes([]);
         try { renderArchivedStudents(); } catch(e) {}
-        const smsCEl = document.getElementById('smsCredits'); if (smsCEl) smsCEl.textContent = smsCredits;
+        try { updateAtStatus(); } catch(e) {}
         launchApp();
         return;
       }
@@ -4402,7 +4402,8 @@ function defaultSettings() {
   return { schoolName:'NEW KIHUMBUINI JUNIOR SCHOOL', address:'', phone:'', email:'', term:'Term 1', year:'2026',
     restrictTeacherAnalytics: false, restrictTeacherFees: false, restrictTeacherList: false, restrictTeacherSettings: false,
     overallGradingMode: 'auto',
-    overallGradeThresholds: null
+    overallGradeThresholds: null,
+    atApiKey: '', atUsername: '', atSenderId: ''
   };
 }
 
@@ -11734,19 +11735,184 @@ function loadMsgRecipients() {
   : '<p style="color:var(--muted);text-align:center;padding:1rem">No recipients found.</p>');
 }
 
-function sendBulkSMS() {
-  const msg=document.getElementById('msgText').value.trim();
-  if(!msg){showToast('Enter a message first','error');return;}
-  const count=document.querySelectorAll('#msgRecipientsList > div').length;
-  if(!count){showToast('No recipients selected','error');return;}
-  if(smsCredits<count){showToast(`Insufficient credits. Need ${count}, have ${smsCredits}`,'warning');return;}
-  smsCredits-=count;
-  localStorage.setItem(K.smsCredits,smsCredits);
-  document.getElementById('smsCredits').textContent=smsCredits;
-  const log={id:uid(),date:new Date().toLocaleString(),to:`${count} recipients`,preview:msg.slice(0,60)+'...',status:'Sent',credits:count};
-  msgLog.unshift(log); save(K.msgLog,msgLog);
-  renderMsgLog(); showToast(`SMS sent to ${count} recipients <i class="fa-solid fa-check"></i>`,'success');
+// ─── Africa's Talking SMS helpers ────────────────────────────────────────────
+
+function updateAtStatus() {
+  const el = document.getElementById('atStatusBadge');
+  if (!el) return;
+  const hasKey = !!(settings.atApiKey && settings.atUsername);
+  el.innerHTML = hasKey
+    ? `<span style="color:#16a34a"><i class="fa-solid fa-circle-check"></i> Gateway configured (${settings.atUsername})</span>`
+    : `<span style="color:#dc2626"><i class="fa-solid fa-circle-xmark"></i> Not configured — SMS will not be sent</span>`;
+  // Also update credit box in Messaging section
+  const smsCEl = document.getElementById('smsCredits');
+  if (smsCEl) smsCEl.innerHTML = hasKey
+    ? `<span style="color:#16a34a"><i class="fa-solid fa-wifi"></i> Live (Africa's Talking)</span>`
+    : `<span style="color:#dc2626">Not configured</span>`;
 }
+
+async function testAtSMS() {
+  saveSettings();
+  if (!settings.atApiKey || !settings.atUsername) {
+    showToast('Enter your API Key and Username first, then save.','warning'); return;
+  }
+  const phone = prompt('Enter your phone number to receive a test SMS (e.g. 0712345678):');
+  if (!phone) return;
+  let p = phone.replace(/\s+/g,'');
+  if (p.startsWith('0')) p = '+254' + p.slice(1);
+  if (p.startsWith('254') && !p.startsWith('+')) p = '+' + p;
+  showToast('Sending test SMS…','info');
+  const result = await atSendSMS([{phone:p, name:'Test'}], `Test SMS from ${settings.schoolName||'School'} Exam Analyzer. Gateway is working!`);
+  if (result.sent > 0) showToast('Test SMS sent successfully! Check your phone. <i class="fa-solid fa-check"></i>','success');
+  else showToast('Test failed: ' + (result.errors[0]||'Unknown error'),'error');
+}
+
+async function atSendSMS(recipients, message) {
+  // recipients: array of { phone, name }
+  // Returns { sent: n, failed: n, errors: [] }
+  const apiKey    = settings.atApiKey   || '';
+  const username  = settings.atUsername || '';
+  const senderId  = settings.atSenderId || '';
+  if (!apiKey || !username) {
+    return { sent: 0, failed: recipients.length, errors: ['SMS gateway not configured. Go to Settings → SMS Gateway.'] };
+  }
+  const phones = recipients.map(r => r.phone).filter(Boolean).join(',');
+  if (!phones) return { sent: 0, failed: 0, errors: [] };
+
+  const body = new URLSearchParams({ username, to: phones, message });
+  if (senderId) body.set('from', senderId);
+
+  try {
+    const resp = await fetch('https://api.africastalking.com/version1/messaging', {
+      method: 'POST',
+      headers: { apiKey, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+    const json = await resp.json();
+    const recipients_result = json?.SMSMessageData?.Recipients || [];
+    const sent   = recipients_result.filter(r => r.statusCode === 101).length;
+    const failed = recipients_result.length - sent;
+    const errors = recipients_result.filter(r => r.statusCode !== 101).map(r => `${r.number}: ${r.status}`);
+    return { sent, failed: failed + (recipients.length - recipients_result.length), errors };
+  } catch(e) {
+    return { sent: 0, failed: recipients.length, errors: [e.message || 'Network error'] };
+  }
+}
+
+function getRecipientPhone(r) {
+  // Normalise Kenyan numbers to +254...
+  let p = (r.contact || r.phone || '').toString().replace(/\s+/g,'').replace(/-/g,'');
+  if (!p) return null;
+  if (p.startsWith('0'))  p = '+254' + p.slice(1);
+  if (p.startsWith('254') && !p.startsWith('+')) p = '+' + p;
+  return p || null;
+}
+
+async function sendBulkSMS() {
+  const msg = document.getElementById('msgText').value.trim();
+  if (!msg) { showToast('Enter a message first','error'); return; }
+  const recipDivs = [...document.querySelectorAll('#msgRecipientsList > div')];
+  if (!recipDivs.length) { showToast('No recipients selected','error'); return; }
+  if (!settings.atApiKey || !settings.atUsername) {
+    showToast('SMS gateway not configured. Go to Settings → SMS Gateway.','warning'); return;
+  }
+  // Build recipients from rendered list; each div has data-id attr
+  const recipList = recipDivs.map(d => {
+    const sid = d.dataset.id;
+    const stu = students.find(s => s.id === sid) || teachers.find(t => t.id === sid);
+    if (!stu) return null;
+    const phone = getRecipientPhone(stu);
+    if (!phone) return null;
+    const personalised = msg
+      .replace(/\{name\}/gi, stu.name || '')
+      .replace(/\{marks\}/gi, '')
+      .replace(/\{grade\}/gi, '')
+      .replace(/\{streamPos\}/gi, '')
+      .replace(/\{overallPos\}/gi, '');
+    return { phone, name: stu.name, message: personalised };
+  }).filter(Boolean);
+  if (!recipList.length) { showToast('No recipients have phone numbers','warning'); return; }
+
+  showToast(`Sending ${recipList.length} SMS…`, 'info');
+  const result = await atSendSMS(recipList, msg);
+  const log = {
+    id: uid(), date: new Date().toLocaleString(),
+    to: `${recipList.length} recipients`,
+    preview: msg.slice(0, 60) + (msg.length > 60 ? '…' : ''),
+    status: result.failed === 0 ? 'Sent' : result.sent > 0 ? `Partial (${result.sent}/${recipList.length})` : 'Failed',
+    credits: result.sent
+  };
+  msgLog.unshift(log); save(K.msgLog, msgLog);
+  renderMsgLog();
+  if (result.failed === 0) showToast(`SMS sent to ${result.sent} recipient${result.sent>1?'s':''} <i class="fa-solid fa-check"></i>`,'success');
+  else showToast(`Sent: ${result.sent} | Failed: ${result.failed}${result.errors.length?' — '+result.errors[0]:''}`, result.sent>0?'warning':'error');
+}
+
+async function dispatchResultSMS() {
+  const examId = document.getElementById('rSmsExam')?.value;
+  if (!examId) { showToast('Please select an exam','error'); return; }
+  if (!settings.atApiKey || !settings.atUsername) {
+    showToast('SMS gateway not configured. Go to Settings → SMS Gateway.','warning'); return;
+  }
+  const stuList = getRSmsCandidates();
+  if (!stuList.length) { showToast('No recipients with phone numbers found','warning'); return; }
+
+  const exam = exams.find(e => e.id === examId);
+  const recipList = stuList.map(stu => {
+    const phone = getRecipientPhone(stu);
+    if (!phone) return null;
+    return { phone, name: stu.name, message: buildResultSMSText(stu, examId) };
+  }).filter(Boolean);
+
+  if (!recipList.length) { showToast('No valid phone numbers found','warning'); return; }
+  closeModal();
+  showToast(`Sending results to ${recipList.length} parent${recipList.length>1?'s':''} via Africa's Talking…`, 'info');
+
+  // Send in batches of 20 to avoid oversized requests
+  const BATCH = 20;
+  let totalSent = 0, totalFailed = 0, firstError = '';
+  for (let i = 0; i < recipList.length; i += BATCH) {
+    const batch = recipList.slice(i, i + BATCH);
+    // Each student gets a personalised message — send individually
+    for (const r of batch) {
+      const res = await atSendSMS([r], r.message);
+      totalSent   += res.sent;
+      totalFailed += res.failed;
+      if (!firstError && res.errors.length) firstError = res.errors[0];
+    }
+  }
+
+  const preview = recipList[0]?.message || `Results for ${exam?.name||'exam'}`;
+  const log = {
+    id: uid(), date: new Date().toLocaleString(),
+    to: `${recipList.length} parents (results)`,
+    preview: preview.slice(0, 80) + '…',
+    status: totalFailed === 0 ? 'Sent' : totalSent > 0 ? `Partial (${totalSent}/${recipList.length})` : 'Failed',
+    credits: totalSent
+  };
+  msgLog.unshift(log); save(K.msgLog, msgLog);
+  renderMsgLog();
+  if (totalFailed === 0) showToast(`Results SMS sent to ${totalSent} parent${totalSent>1?'s':''} <i class="fa-solid fa-check"></i>`,'success');
+  else showToast(`Sent: ${totalSent} | Failed: ${totalFailed}${firstError?' — '+firstError:''}`, totalSent>0?'warning':'error');
+}
+
+function openMpesaModal() {
+  // Replaced by real SMS gateway — direct user to Africa's Talking topup
+  showModal('<i class="fa-solid fa-circle-info"></i> Top Up SMS Balance',`
+    <p style="font-size:.875rem;color:var(--muted);margin-bottom:1rem">
+      This app uses <strong>Africa's Talking</strong> for SMS. Credits are managed directly on their platform.
+    </p>
+    <ol style="font-size:.85rem;line-height:2;color:var(--text);padding-left:1.25rem">
+      <li>Log in at <a href="https://account.africastalking.com" target="_blank" style="color:var(--primary)">account.africastalking.com</a></li>
+      <li>Go to <strong>Billing → Add Money</strong> and top up via M-Pesa</li>
+      <li>Your SMS credits will be available immediately</li>
+    </ol>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:.75rem">Approx. KES 1–2 per SMS (Kenya). Top up any amount from KES 100.</p>
+  `,[{label:'Open Africa\'s Talking', cls:'btn-primary', action:'window.open(\"https://account.africastalking.com\",\"_blank\")'},
+     {label:'Close', cls:'btn-outline', action:'closeModal()'}]);
+}
+
+function processMpesa() { closeModal(); } // legacy stub — no-op
 
 function sendResultsSMS() {
   // Build exam selector — use exam.name (not exam.title)
@@ -11935,35 +12101,7 @@ function previewResultSMSMessage() {
   preview.textContent = txt || 'Could not generate preview — ensure marks are entered for this exam.';
 }
 
-function dispatchResultSMS() {
-  const examId = document.getElementById('rSmsExam')?.value;
-  if (!examId) { showToast('Please select an exam','error'); return; }
-
-  const stuList = getRSmsCandidates();
-
-  if (!stuList.length) { showToast('No recipients with phone numbers found','warning'); return; }
-  if (smsCredits < stuList.length) {
-    showToast(`Insufficient SMS credits. Need ${stuList.length}, have ${smsCredits}`,'warning');
-    return;
-  }
-
-  const exam = exams.find(e => e.id === examId);
-  smsCredits -= stuList.length;
-  localStorage.setItem(K.smsCredits, smsCredits);
-  document.getElementById('smsCredits').textContent = smsCredits;
-
-  const preview = buildResultSMSText(stuList[0], examId) || `Results for ${exam?.name||'exam'}`;
-  const log = {
-    id: uid(), date: new Date().toLocaleString(),
-    to: `${stuList.length} parents`,
-    preview: preview.slice(0, 80) + '…',
-    status: 'Sent', credits: stuList.length
-  };
-  msgLog.unshift(log); save(K.msgLog, msgLog);
-  renderMsgLog();
-  closeModal();
-  showToast(`Results SMS sent to ${stuList.length} parent${stuList.length>1?'s':''} <i class="fa-solid fa-check"></i>`,'success');
-}
+// dispatchResultSMS is defined above (Africa's Talking live version)
 
 function renderMsgLog() {
   document.getElementById('msgLogBody').innerHTML=msgLog.map((m,i)=>`
@@ -11975,25 +12113,7 @@ function renderMsgLog() {
     </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.5rem">No messages sent yet.</td></tr>';
 }
 
-function openMpesaModal() {
-  showModal('<i class="fa-solid fa-credit-card"></i> Buy SMS Credits (M-Pesa)',`
-    <p style="margin-bottom:1rem;font-size:.875rem;color:var(--muted)">Enter amount to purchase SMS credits. 1 credit = 1 SMS.</p>
-    <div class="fg" style="margin-bottom:1rem"><label>Amount (KES)</label><input type="number" id="mpesaAmount" placeholder="e.g. 500" min="100"/></div>
-    <div class="fg"><label>M-Pesa Phone</label><input type="tel" id="mpesaPhone" placeholder="07XX XXX XXX"/></div>
-    <p style="margin-top:1rem;font-size:.78rem;color:var(--muted)">KES 100 = 100 SMS credits. A payment prompt will be sent to your phone.</p>
-  `,[
-    {label:'<i class="fa-solid fa-credit-card"></i> Pay Now', cls:'btn-primary', action:'processMpesa()'},
-    {label:'Cancel', cls:'btn-outline', action:'closeModal()'}
-  ]);
-}
-
-function processMpesa() {
-  const amt=parseInt(document.getElementById('mpesaAmount')?.value||0);
-  if(!amt||amt<100){showToast('Minimum KES 100','error');return;}
-  smsCredits+=amt; localStorage.setItem(K.smsCredits,smsCredits);
-  document.getElementById('smsCredits').textContent=smsCredits;
-  closeModal(); showToast(`${amt} SMS credits added <i class="fa-solid fa-check"></i>`,'success');
-}
+// openMpesaModal and processMpesa are defined above (Africa's Talking version)
 
 // ═══════════════ SETTINGS ═══════════════
 function loadSettings() {
@@ -12017,6 +12137,11 @@ function loadSettings() {
   if (rtl) rtl.checked = !!s.restrictTeacherList;
   const rts = document.getElementById('restrictTeacherSettings');
   if (rts) rts.checked = !!s.restrictTeacherSettings;
+  // Africa's Talking credentials
+  const atKey = document.getElementById('setAtApiKey');     if (atKey)  atKey.value  = s.atApiKey  || '';
+  const atUser= document.getElementById('setAtUsername');   if (atUser) atUser.value = s.atUsername|| '';
+  const atSid = document.getElementById('setAtSenderId');   if (atSid)  atSid.value  = s.atSenderId|| '';
+  updateAtStatus();
   renderAdminList();
   renderOverallGradingCard();
   try { renderSubjectCombinationUI(); } catch(e) {}
@@ -12036,6 +12161,9 @@ function saveSettings() {
     restrictTeacherList:      settings.restrictTeacherList      || false,
     restrictTeacherSettings:  settings.restrictTeacherSettings  || false,
     subjectCombinations:      settings.subjectCombinations      || {},
+    atApiKey:   (document.getElementById('setAtApiKey')?.value  || '').trim(),
+    atUsername: (document.getElementById('setAtUsername')?.value || '').trim(),
+    atSenderId: (document.getElementById('setAtSenderId')?.value || '').trim(),
   };
   save(K.settings,[settings]);
   document.getElementById('sbSchoolName').textContent=settings.schoolName||'School';

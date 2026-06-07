@@ -5170,8 +5170,8 @@ document.addEventListener('tt_sectionVisible', function() {
             <button class="btn btn-outline" onclick="sendResultsSMS()"><i class="fa-solid fa-chart-bar"></i> Send Results SMS</button>
           </div>
           <div class="sms-credit-box" style="margin-top:1rem">
-            <div>SMS Credits: <strong id="smsCredits">0</strong></div>
-            <button class="btn btn-outline btn-sm" onclick="openMpesaModal()"><i class="fa-solid fa-credit-card"></i> Buy Credits (M-Pesa)</button>
+            <div>SMS via Africa's Talking: <strong id="smsCredits"></strong></div>
+            <button class="btn btn-outline btn-sm" onclick="openMpesaModal()"><i class="fa-solid fa-credit-card"></i> Top Up Credits</button>
           </div>
         </div>
         <div class="card">
@@ -6865,6 +6865,39 @@ document.addEventListener('tt_sectionVisible', function() {
             </div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveSettings()"><i class="fa-solid fa-floppy-disk"></i> Save Settings</button>
+        </div>
+
+        <!-- ── SMS Gateway (Africa's Talking) ── -->
+        <div class="card">
+          <h3><i class="fa-solid fa-message"></i> SMS Gateway — Africa's Talking</h3>
+          <p style="font-size:.83rem;color:var(--muted);margin-bottom:1rem">
+            Enter your <a href="https://africastalking.com" target="_blank" style="color:var(--primary)">Africa's Talking</a> credentials to enable live SMS to parents.
+            Sign up free at <strong>africastalking.com</strong> — use the <em>Sandbox</em> environment for testing before going live.
+          </p>
+          <div class="frow c2">
+            <div class="fg">
+              <label>Username <span style="font-size:.75rem;color:var(--muted)">(from AT dashboard)</span></label>
+              <input type="text" id="setAtUsername" placeholder="e.g. myschool or sandbox"/>
+            </div>
+            <div class="fg">
+              <label>API Key <span style="font-size:.75rem;color:var(--muted)">(Settings → API Key in AT dashboard)</span></label>
+              <input type="password" id="setAtApiKey" placeholder="AT API key"/>
+            </div>
+            <div class="fg">
+              <label>Sender ID <span style="font-size:.75rem;color:var(--muted)">(optional — leave blank to use shortcode)</span></label>
+              <input type="text" id="setAtSenderId" placeholder="e.g. MYSCHOOL (alphanumeric, max 11 chars)"/>
+            </div>
+          </div>
+          <div style="margin-top:.9rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveSettings()"><i class="fa-solid fa-floppy-disk"></i> Save Gateway Settings</button>
+            <button class="btn btn-outline btn-sm" onclick="testAtSMS()"><i class="fa-solid fa-paper-plane"></i> Send Test SMS</button>
+            <div id="atStatusBadge" style="font-size:.82rem"></div>
+          </div>
+          <div style="margin-top:.9rem;font-size:.78rem;color:var(--muted);background:var(--surface);border-radius:8px;padding:.75rem 1rem;border:1px solid var(--border)">
+            <strong>Kenya pricing:</strong> ~KES 1–2 per SMS. Top up at
+            <a href="https://account.africastalking.com" target="_blank" style="color:var(--primary)">account.africastalking.com</a>
+            via M-Pesa under <em>Billing → Add Money</em>.
+          </div>
         </div>
 
         <!-- Subject Combinations (Senior School only) -->
