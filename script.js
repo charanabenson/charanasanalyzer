@@ -919,10 +919,21 @@ async function doUnifiedLogin() {
     }
 
     // Admin login: must be botiso + saved password
-    if (u === ADMIN_USERNAME && p === school.password) {
-      await loadSchoolContext(school);
-      currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
-      re(); maybeSaveCreds(); finishLogin(school); return;
+    // Check both school.password and platformCreds for robustness
+    if (u === ADMIN_USERNAME) {
+      const savedCreds = getPlatformCreds();
+      const savedPwd = school.password || (savedCreds && savedCreds.password) || null;
+      if (savedPwd && p === savedPwd) {
+        // Keep both stores in sync
+        school.password = savedPwd;
+        savePlatform();
+        setPlatformCreds(ADMIN_USERNAME, savedPwd);
+        await loadSchoolContext(school);
+        currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
+        re(); maybeSaveCreds(); finishLogin(school); return;
+      }
+      re('Incorrect username or password.');
+      return;
     }
 
     re('Incorrect username or password.');
