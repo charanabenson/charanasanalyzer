@@ -165,7 +165,7 @@ function getCurrentArchive()              { return getSchoolArchive(currentSchoo
 function saveCurrentArchive(data)         { saveSchoolArchive(currentSchoolId, data); }
 
 function getPlatformCreds() {
-  try { return JSON.parse(localStorage.getItem(PLATFORM_CREDS_KEY)) || null; } catch { return null; }
+  try { return JSON.parse(localStorage.getItem(PLATFORM_CREDS_KEY)) || { username: 'botiso', password: '998877' }; } catch { return { username: 'botiso', password: '998877' }; }
 }
 function setPlatformCreds(u, p) {
   localStorage.setItem(PLATFORM_CREDS_KEY, JSON.stringify({ username: u, password: p }));
@@ -791,29 +791,7 @@ function doPlatformLogin() {
   setTimeout(() => {
   const creds = getPlatformCreds();
 
-  // First-ever run: no creds saved yet — confirm before creating account
-  if (!creds) {
-    if (!u || !p) {
-      re();
-      errEl.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Enter a username and password to create your platform account.';
-      errEl.style.display = 'block';
-      return;
-    }
-    if (p.length < 6) {
-      re();
-      errEl.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Password must be at least 6 characters.';
-      errEl.style.display = 'block';
-      return;
-    }
-    if (!validateUsername('platform', u)) { re(); return; }
-    setPlatformCreds(u, p);
-    re();
-    showToast('Platform account created <i class="fa-solid fa-check"></i>', 'success');
-    currentUser = { username: u, role: 'platform_admin', name: 'Platform Admin', canAnalyse: true, canReport: true, canMerit: true };
-    showSchoolSelector(true);
-    return;
-  }
-
+  // Credentials always available (hardcoded defaults: botiso / 998877)
   if (u === creds.username && p === creds.password) {
     re();
     currentUser = { username: u, role: 'platform_admin', name: 'Platform Admin', canAnalyse: true, canReport: true, canMerit: true };
