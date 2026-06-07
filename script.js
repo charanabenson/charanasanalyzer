@@ -854,46 +854,68 @@ async function doUnifiedLogin() {
 
     if (!u || !p) { re('Please enter a username and password.'); return; }
 
-    // ── Fixed username: only 'botiso' is accepted as admin ──
     const ADMIN_USERNAME = 'botiso';
+    const SAVED_PWD_KEY  = 'nkjs_admin_pwd'; // simple dedicated key
 
-    loadPlatform();
+    // ── Read or create the saved admin password ──
+    let savedPwd = localStorage.getItem(SAVED_PWD_KEY) || null;
 
-    // ── First-time setup: register school with username=botiso and the chosen password ──
-    if (platformSchools.length === 0) {
-      if (u !== ADMIN_USERNAME) { re('Incorrect username or password.'); return; }
-      const school = {
-        id: 'school-' + Date.now(),
-        name: 'NEW KIHUMBUINI JUNIOR SCHOOL',
-        code: 'junior',
-        username: ADMIN_USERNAME,
-        password: p,
-        active: true,
-        createdAt: new Date().toISOString()
-      };
-      platformSchools = [school];
-      savePlatform();
-      setPlatformCreds(ADMIN_USERNAME, p);
-      await loadSchoolContext(school);
-      currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
-      re(); maybeSaveCreds();
-      showToast('Welcome! Your admin account has been created.', 'success');
-      finishLogin(school);
-      return;
+    // ── First-ever login: username must be botiso, any password is accepted & locked in ──
+    if (!savedPwd) {
+      if (u !== ADMIN_USERNAME) { re('Username must be "botiso".'); return; }
+      // Lock in the password
+      localStorage.setItem(SAVED_PWD_KEY, p);
+      savedPwd = p;
+      // Bootstrap the school record
+      loadPlatform();
+      if (platformSchools.length === 0) {
+        const school = {
+          id: 'school-nkjs',
+          name: 'NEW KIHUMBUINI JUNIOR SCHOOL',
+          code: 'junior',
+          username: ADMIN_USERNAME,
+          password: p,
+          active: true,
+          createdAt: new Date().toISOString()
+        };
+        platformSchools = [school];
+        savePlatform();
+        setPlatformCreds(ADMIN_USERNAME, p);
+        await loadSchoolContext(school);
+        currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
+        re(); maybeSaveCreds();
+        showToast('Welcome! Your password has been saved.', 'success');
+        finishLogin(school);
+        return;
+      }
     }
 
-    // ── Subsequent logins ──
-    const school = platformSchools[0];
-    if (school.active === false) { re('<strong>Account Suspended.</strong>'); return; }
+    loadPlatform();
+    const school = platformSchools[0] || null;
 
-    // Check teacher accounts first so teacher logins still work
+    // ── Admin login ──
+    if (u === ADMIN_USERNAME) {
+      if (p !== savedPwd) { re('Incorrect password.'); return; }
+      if (!school) { re('School not found. Please refresh.'); return; }
+      // Keep school record in sync
+      school.password = savedPwd;
+      savePlatform();
+      setPlatformCreds(ADMIN_USERNAME, savedPwd);
+      await loadSchoolContext(school);
+      currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
+      re(); maybeSaveCreds(); finishLogin(school); return;
+    }
+
+    if (!school) { re('Incorrect username or password.'); return; }
+
+    // ── Teacher login ──
     loadSchoolContextSync(school);
     const _admin = admins.find(a=>a.username===u&&a.password===p);
     if (_admin) { await loadSchoolContext(school); currentUser={..._admin,canAnalyse:true,canReport:true,canMerit:true}; re(); maybeSaveCreds(); finishLogin(school); return; }
     const _teacher = teachers.find(t=>t.username===u&&t.password===p);
     if (_teacher) { await loadSchoolContext(school); currentUser={username:_teacher.username,role:'teacher',name:_teacher.name,teacherId:_teacher.id,canAnalyse:_teacher.canAnalyse,canReport:_teacher.canReport,canMerit:_teacher.canMerit}; re(); maybeSaveCreds(); finishLogin(school); return; }
 
-    // Student login: admNo@junior
+    // ── Student login: admNo@junior ──
     const _atIdx = u.indexOf('@');
     if (_atIdx > 0) {
       const admPart = u.slice(0, _atIdx).trim();
@@ -916,24 +938,6 @@ async function doUnifiedLogin() {
       await loadSchoolContext(school);
       currentUser = { username:'guest', role:'guest', name:'Guest', canAnalyse:false, canReport:false, canMerit:false };
       re(); finishGuestLogin(school); return;
-    }
-
-    // Admin login: must be botiso + saved password
-    // Check both school.password and platformCreds for robustness
-    if (u === ADMIN_USERNAME) {
-      const savedCreds = getPlatformCreds();
-      const savedPwd = school.password || (savedCreds && savedCreds.password) || null;
-      if (savedPwd && p === savedPwd) {
-        // Keep both stores in sync
-        school.password = savedPwd;
-        savePlatform();
-        setPlatformCreds(ADMIN_USERNAME, savedPwd);
-        await loadSchoolContext(school);
-        currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
-        re(); maybeSaveCreds(); finishLogin(school); return;
-      }
-      re('Incorrect username or password.');
-      return;
     }
 
     re('Incorrect username or password.');
