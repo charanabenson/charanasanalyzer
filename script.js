@@ -4267,6 +4267,10 @@ function launchApp() {
   // Enforce access level restrictions for this school (must run after applyPlatformNavConfig)
   applyAccessLevelRestrictions();
 
+  // Dashboard button always stays visible in mobile nav regardless of any config
+  const _dashBtn = document.getElementById('mbnDashboardBtn');
+  if (_dashBtn) _dashBtn.style.display = '';
+
   // Teachers are locked out of dashboard — send them straight to exams
   if (currentUser && currentUser.role === 'teacher') {
     go('exams', document.querySelector('[data-s="exams"]'));

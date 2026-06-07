@@ -8187,12 +8187,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Mobile bottom navigation (phones only, scrollable) -->
 <nav class="mobile-bottom-nav" id="mobileBottomNav" style="display:none">
+  <a class="mbn-item" id="mbnDashboardBtn" data-s="dashboard" onclick="go('dashboard',this);mbnActivate(this)"><i class="fa-solid fa-house"></i><span>Home</span></a>
   <a class="mbn-item active" data-s="students"    onclick="go('students',this);mbnActivate(this)"><i class="fa-solid fa-user-graduate"></i><span>Students</span></a>
   <a class="mbn-item"        data-s="teachers"    onclick="go('teachers',this);mbnActivate(this)"><i class="fa-solid fa-chalkboard-user"></i><span>Teachers</span></a>
   <a class="mbn-item"        data-s="classes"     onclick="go('classes',this);mbnActivate(this)"><i class="fa-solid fa-school"></i><span>Classes</span></a>
   <a class="mbn-item"        data-s="subjects"    onclick="go('subjects',this);mbnActivate(this)"><i class="fa-solid fa-book"></i><span>Subjects</span></a>
   <a class="mbn-item"        data-s="exams"       onclick="go('exams',this);mbnActivate(this)"><i class="fa-solid fa-file-pen"></i><span>Exams</span></a>
-  <a class="mbn-item"        data-s="reports"     onclick="go('reports',this);mbnActivate(this)"><i class="fa-solid fa-file-lines"></i><span>Reports</span></a>
   <a class="mbn-item mbn-yellow" data-s="settings" onclick="go('settings',this);mbnActivate(this)"><i class="fa-solid fa-sliders"></i><span>Settings</span></a>
   <!-- Platform Admin tabs - shown only for platform admin -->
   <a class="mbn-item mbn-plat" id="mbnPlat-schools" style="display:none" onclick="go('platform',document.getElementById('platNavLink'));mbnActivate(this);platNavbarTab('platTab-schools','platNb-schools')"><i class="fa-solid fa-school"></i><span>Schools</span></a>
@@ -8219,6 +8219,9 @@ document.addEventListener('DOMContentLoaded', function() {
 function mbnActivate(el) {
   document.querySelectorAll('.mbn-item').forEach(i => i.classList.remove('active'));
   el.classList.add('active');
+  // Dashboard button always stays visible
+  const dash = document.getElementById('mbnDashboardBtn');
+  if (dash) dash.style.display = '';
 }
 
 function mbnCollapse() {
