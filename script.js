@@ -835,41 +835,22 @@ async function doUnifiedLogin() {
     const ADMIN_USERNAME = 'botiso';
     const SAVED_PWD_KEY  = 'nkjs_admin_pwd'; // simple dedicated key
 
-    // ── Read or create the saved admin password ──
-    let savedPwd = localStorage.getItem(SAVED_PWD_KEY) || null;
-
-    // ── First-ever login: username must be botiso, any password is accepted & locked in ──
-    if (!savedPwd) {
-      if (u !== ADMIN_USERNAME) { re('Username must be "botiso".'); return; }
-      // Lock in the password
-      localStorage.setItem(SAVED_PWD_KEY, p);
-      savedPwd = p;
-      // Bootstrap the school record
-      loadPlatform();
-      if (platformSchools.length === 0) {
-        const school = {
-          id: 'school-nkjs',
-          name: 'NEW KIHUMBUINI JUNIOR SCHOOL',
-          code: 'junior',
-          username: ADMIN_USERNAME,
-          password: p,
-          active: true,
-          createdAt: new Date().toISOString()
-        };
-        platformSchools = [school];
-        savePlatform();
-        setPlatformCreds(ADMIN_USERNAME, p);
-        await loadSchoolContext(school);
-        currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
-        re(); maybeSaveCreds();
-        showToast('Welcome! Your password has been saved.', 'success');
-        finishLogin(school);
-        return;
-      }
-    }
+    // ── Password is hardcoded — always 998877 regardless of localStorage ──
+    const FIXED_PWD = '998877';
+    let savedPwd = FIXED_PWD;
+    localStorage.setItem(SAVED_PWD_KEY, FIXED_PWD); // overwrite any previously set password
 
     loadPlatform();
     const school = platformSchools[0] || null;
+
+    // ── Bootstrap school record on very first run if missing ──
+    if (platformSchools.length === 0) {
+      const school0 = {
+        id: 'school-nkjs', name: 'NEW KIHUMBUINI JUNIOR SCHOOL', code: 'junior',
+        username: ADMIN_USERNAME, password: FIXED_PWD, active: true, createdAt: new Date().toISOString()
+      };
+      platformSchools = [school0]; savePlatform(); setPlatformCreds(ADMIN_USERNAME, FIXED_PWD);
+    }
 
     // ── Admin login ──
     if (u === ADMIN_USERNAME) {
