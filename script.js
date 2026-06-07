@@ -854,35 +854,39 @@ async function doUnifiedLogin() {
 
     if (!u || !p) { re('Please enter a username and password.'); return; }
 
+    // ── Fixed username: only 'botiso' is accepted as admin ──
+    const ADMIN_USERNAME = 'botiso';
+
     loadPlatform();
 
-    // ── First-time setup: accept ANY username & password ──
+    // ── First-time setup: register school with username=botiso and the chosen password ──
     if (platformSchools.length === 0) {
+      if (u !== ADMIN_USERNAME) { re('Incorrect username or password.'); return; }
       const school = {
         id: 'school-' + Date.now(),
-        name: 'Junior School',
+        name: 'NEW KIHUMBUINI JUNIOR SCHOOL',
         code: 'junior',
-        username: u,
+        username: ADMIN_USERNAME,
         password: p,
         active: true,
         createdAt: new Date().toISOString()
       };
       platformSchools = [school];
       savePlatform();
-      setPlatformCreds(u, p); // retained for legacy guards
+      setPlatformCreds(ADMIN_USERNAME, p);
       await loadSchoolContext(school);
-      currentUser = { username: u, role:'admin', name: u, canAnalyse:true, canReport:true, canMerit:true };
+      currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
       re(); maybeSaveCreds();
       showToast('Welcome! Your admin account has been created.', 'success');
       finishLogin(school);
       return;
     }
 
-    // ── Subsequent logins: accept ANY username/password as admin ──
+    // ── Subsequent logins ──
     const school = platformSchools[0];
     if (school.active === false) { re('<strong>Account Suspended.</strong>'); return; }
 
-    // Check teacher/student accounts first so role-specific logins still work
+    // Check teacher accounts first so teacher logins still work
     loadSchoolContextSync(school);
     const _admin = admins.find(a=>a.username===u&&a.password===p);
     if (_admin) { await loadSchoolContext(school); currentUser={..._admin,canAnalyse:true,canReport:true,canMerit:true}; re(); maybeSaveCreds(); finishLogin(school); return; }
@@ -914,14 +918,14 @@ async function doUnifiedLogin() {
       re(); finishGuestLogin(school); return;
     }
 
-    // Default: accept any credentials as the school admin (update stored creds)
-    school.username = u;
-    school.password = p;
-    savePlatform();
-    setPlatformCreds(u, p);
-    await loadSchoolContext(school);
-    currentUser = { username: u, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
-    re(); maybeSaveCreds(); finishLogin(school); return;
+    // Admin login: must be botiso + saved password
+    if (u === ADMIN_USERNAME && p === school.password) {
+      await loadSchoolContext(school);
+      currentUser = { username: ADMIN_USERNAME, role:'admin', name: school.name, canAnalyse:true, canReport:true, canMerit:true };
+      re(); maybeSaveCreds(); finishLogin(school); return;
+    }
+
+    re('Incorrect username or password.');
   } catch(e) {
     console.error('doUnifiedLogin error:', e);
     re('Something went wrong during sign-in. Please refresh and try again. (' + (e.message||'unknown error') + ')');
@@ -4376,7 +4380,7 @@ async function initApp() {
   showUnifiedLogin();
 }
 function defaultSettings() {
-  return { schoolName:'', address:'', phone:'', email:'', term:'Term 1', year:'2025',
+  return { schoolName:'NEW KIHUMBUINI JUNIOR SCHOOL', address:'', phone:'', email:'', term:'Term 1', year:'2026',
     restrictTeacherAnalytics: false, restrictTeacherFees: false, restrictTeacherList: false, restrictTeacherSettings: false,
     overallGradingMode: 'auto',
     overallGradeThresholds: null
