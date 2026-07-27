@@ -5496,6 +5496,18 @@ function populateReportDropdowns() {
     const years = [...new Set([...exams.map(e=>e.year), ...platYears, String(new Date().getFullYear())])].sort((a,b)=>b-a);
     rpYear.innerHTML = '<option value="">— Auto from Exam —</option>' + years.map(y=>`<option value="${y}">${y}</option>`).join('');
   }
+  // Restore the "show position" preference (persisted per browser)
+  const rpShowPos = document.getElementById('rpShowPosition');
+  if (rpShowPos) {
+    const saved = localStorage.getItem('rpShowPosition');
+    rpShowPos.checked = saved === null ? true : saved === '1';
+  }
+}
+
+// Called when the "show learner position" checkbox is toggled — persist the preference
+function onRpShowPositionChange() {
+  const rpShowPos = document.getElementById('rpShowPosition');
+  if (rpShowPos) localStorage.setItem('rpShowPosition', rpShowPos.checked ? '1' : '0');
 }
 
 // Called when class filter changes — cascade to stream and student dropdowns
@@ -11288,7 +11300,8 @@ function getStudentReport(stuId, examId) {
   return { stu, exam, cls, stream, subjectRows, total, mean, mGrade, totalPoints, overallRank, streamRank, history, isConsolidated, sourceExamObjs };
 }
 
-function buildReportHTML(data, ctRemarks, principalRemarks, nextOpen, schoolClosed, feeBalance, feeNextTerm, feeStatus) {
+function buildReportHTML(data, ctRemarks, principalRemarks, nextOpen, schoolClosed, feeBalance, feeNextTerm, feeStatus, showPosition) {
+  if (showPosition === undefined) showPosition = true;
   data.schoolClosed = schoolClosed;
   data.feeBalance = feeBalance;
   data.feeNextTerm = feeNextTerm;
@@ -11400,8 +11413,8 @@ function buildReportHTML(data, ctRemarks, principalRemarks, nextOpen, schoolClos
           <div class="rf-info-item"><span class="rf-info-label">Total Points</span><span class="rf-info-value" style="color:#7c3aed;font-size:11pt;font-weight:700">${data.totalPoints}</span></div>
           <div class="rf-info-item"><span class="rf-info-label">Points Grade</span><span class="rf-info-value" style="color:${getPointsGrade(data.totalPoints).cls.includes('green')||getPointsGrade(data.totalPoints).cls.includes('teal')?'#16a34a':getPointsGrade(data.totalPoints).cls.includes('red')?'#dc2626':'#1a6fb5'};font-size:11pt;font-weight:700">${getPointsGrade(data.totalPoints).grade} — ${getPointsGrade(data.totalPoints).label}</span></div>
           <div class="rf-info-item"><span class="rf-info-label">Grade</span><span class="rf-info-value" style="color:#16a34a;font-size:11pt">${data.mGrade.grade} — ${data.mGrade.label}</span></div>
-          <div class="rf-info-item"><span class="rf-info-label">Stream Position</span><span class="rf-info-value">${data.streamRank > 0 ? data.streamRank + ' / ' + (students.filter(s=>s.streamId===data.stu.streamId).length) : '—'}</span></div>
-          <div class="rf-info-item"><span class="rf-info-label">Overall Position</span><span class="rf-info-value">${data.overallRank > 0 ? data.overallRank + ' / ' + students.length : '—'}</span></div>
+          ${showPosition ? `<div class="rf-info-item"><span class="rf-info-label">Stream Position</span><span class="rf-info-value">${data.streamRank > 0 ? data.streamRank + ' / ' + (students.filter(s=>s.streamId===data.stu.streamId).length) : '—'}</span></div>
+          <div class="rf-info-item"><span class="rf-info-label">Overall Position</span><span class="rf-info-value">${data.overallRank > 0 ? data.overallRank + ' / ' + students.length : '—'}</span></div>` : ''}
         </div>
         ${data.subjectRows.some(r=>r.absent) ? `<div style="margin-top:.4rem;padding:.35rem .65rem;background:#fff8f8;border:1px solid #fecaca;border-radius:5px;font-size:.75rem;color:#dc2626"><i class="fa-solid fa-circle-exclamation"></i> <strong>X</strong> = Missing/Absent — these subjects are excluded from mean, total and ranking.</div>` : ''}
         <!-- Points Grade Scale reference -->
@@ -11499,6 +11512,7 @@ function generateReport() {
   const feeBalance  = document.getElementById('rpFeeBalance')?.value || '';
   const feeNextTerm = document.getElementById('rpFeeNextTerm')?.value || '';
   const autoComments = document.getElementById('rpAutoComments')?.checked !== false;
+  const showPosition = document.getElementById('rpShowPosition')?.checked !== false;
   // Resolve effective term/year for fee auto-link (manual override > exam derived)
   const rpTermOverride = document.getElementById('rpTerm')?.value || '';
   const rpYearOverride = document.getElementById('rpYear')?.value || '';
@@ -11523,10 +11537,10 @@ function generateReport() {
   area.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:.75rem;padding:3rem 1rem;color:var(--muted);font-size:.95rem"><i class="fa-solid fa-spinner fa-spin fa-lg" style="color:var(--primary)"></i><span>Generating ' + stuList.length + ' report form' + (stuList.length !== 1 ? 's' : '') + '…</span></div>';
 
   // Defer heavy computation so spinner renders first
-  setTimeout(function() { _generateReportBody(stuList, examId, ctR, prR, nextOpen, schoolClosed, feeBalance, feeNextTerm, autoComments, rpTermOverride, rpYearOverride, area); }, 30);
+  setTimeout(function() { _generateReportBody(stuList, examId, ctR, prR, nextOpen, schoolClosed, feeBalance, feeNextTerm, autoComments, rpTermOverride, rpYearOverride, area, showPosition); }, 30);
 }
 
-function _generateReportBody(stuList, examId, ctR, prR, nextOpen, schoolClosed, feeBalance, feeNextTerm, autoComments, rpTermOverride, rpYearOverride, area) {
+function _generateReportBody(stuList, examId, ctR, prR, nextOpen, schoolClosed, feeBalance, feeNextTerm, autoComments, rpTermOverride, rpYearOverride, area, showPosition) {
   // Load fees once before the loop — NOT inside it (critical performance fix)
   loadFees();
   area.innerHTML = stuList.map(stu => {
@@ -11582,7 +11596,9 @@ function _generateReportBody(stuList, examId, ctR, prR, nextOpen, schoolClosed, 
       const struct  = feeStructures.find(f => f.classId===stu.classId && f.term===nxtTerm && String(f.year)===nxtYear);
       if (struct) autoFeeNextTerm = struct.totalFee;
     }
-    return buildReportHTML(d, finalCT, finalPR, nextOpen, schoolClosed, autoFeeBalance, autoFeeNextTerm, autoFeeStatus);
+    // Wrap each report in an A4-page shell + scaler so it always fits exactly one
+    // printed page (whether printed directly with Ctrl+P or via "Export All PDF").
+    return `<div class="rf-a4-page"><div class="rf-scaler">${buildReportHTML(d, finalCT, finalPR, nextOpen, schoolClosed, autoFeeBalance, autoFeeNextTerm, autoFeeStatus, showPosition)}</div></div>`;
   }).join('');
 
   showToast(`${stuList.length} report(s) generated <i class="fa-solid fa-check"></i>`,'success');
@@ -11644,6 +11660,27 @@ function _generateReportBody(stuList, examId, ctR, prR, nextOpen, schoolClosed, 
 }
 
 function previewReport() { generateReport(); }
+
+// ── Scale each report card to fit exactly one A4 page when printing ──────
+// Works for direct browser printing (Ctrl+P) of the Report Forms tab, so
+// report cards are never cut off regardless of how much content they hold.
+function rfScaleReportsForPrint() {
+  const A4H = 297 * 96 / 25.4;  // ≈ 1122.5 px
+  const A4W = 210 * 96 / 25.4;  // ≈  793.7 px
+  document.querySelectorAll('#reportPreviewArea .rf-scaler').forEach(scaler => {
+    scaler.style.transform = '';
+    const form = scaler.querySelector('.report-form');
+    if (!form) return;
+    const h = form.offsetHeight || form.scrollHeight;
+    const w = form.offsetWidth  || form.scrollWidth || A4W;
+    const scale = Math.min(A4H / h, A4W / w, 1); // never enlarge
+    if (scale < 0.999) scaler.style.transform = `scale(${scale})`;
+  });
+}
+window.addEventListener('beforeprint', rfScaleReportsForPrint);
+window.addEventListener('afterprint', () => {
+  document.querySelectorAll('#reportPreviewArea .rf-scaler').forEach(s => { s.style.transform = ''; });
+});
 
 // ═══════════════ MESSAGING ═══════════════
 function loadMsgRecipients() {
